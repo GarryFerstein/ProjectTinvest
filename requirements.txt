@@ -1,0 +1,9 @@
+tinkoff-investments
+load_dotenv
+matplotlib
+pandas
+numpy
+ta
+asyncio
+logging
+telegram
