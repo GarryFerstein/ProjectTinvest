@@ -33,10 +33,12 @@ FIGI_TO_TICKER = {
 
 # Таймфрейм и лимиты данных
 TIMEFRAME = "15m"  # Таймфрейм для анализа
-LIMIT = int(os.getenv("LIMIT", 100))  # Количество свечей для анализа
+LIMIT = int(os.getenv("LIMIT", 200))  # Количество свечей для анализа
 TIMEOUT = int(os.getenv("TIMEOUT", 30))  # Задержка между циклами в секундах
 
 # Параметры индикаторов
 BOLLINGER_WINDOW = int(os.getenv("BOLLINGER_WINDOW", 14))
 BOLLINGER_WINDOW_DEV = int(os.getenv("BOLLINGER_WINDOW_DEV", 2))
 RSI_WINDOW = int(os.getenv("RSI_WINDOW", 9))
+
+

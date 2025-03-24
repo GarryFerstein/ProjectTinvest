@@ -1,57 +1,26 @@
-# Уведомления в телеграм
+# Уведомления в телеграмм
 
 import logging
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application
+from telegram import Bot
+from telegram.constants import ParseMode
 
 class TelegramNotifier:
-    def __init__(self, token, chat_id):
+    def __init__(self, token: str, chat_id: str):
+        if not token or not chat_id:
+            raise ValueError("Telegram token и chat_id должны быть указаны")
         self.application = Application.builder().token(token).build()
         self.bot = self.application.bot
         self.chat_id = chat_id
         self.logger = logging.getLogger('telegram_notifier')
-        self.is_running = False  # Переменная для управления состоянием бота
 
-        # Регистрация команд
-        self.application.add_handler(CommandHandler("start_bot", self.start_bot))
-        self.application.add_handler(CommandHandler("stop_bot", self.stop_bot))
-
-    async def send_message(self, message):
-        """
-        Отправляет сообщение в Telegram.
-        """
+    async def send_message(self, message: str):
         try:
-            await self.bot.send_message(chat_id=self.chat_id, text=message)
+            await self.bot.send_message(
+                chat_id=self.chat_id,
+                text=message,
+                parse_mode=ParseMode.MARKDOWN
+            )
             self.logger.info(f"Message sent: {message}")
         except Exception as e:
             self.logger.error(f"Failed to send message: {e}")
-
-    async def start_bot(self, update, context):
-        """
-        Команда для запуска бота.
-        """
-        if not self.is_running:
-            self.is_running = True
-            await update.message.reply_text("✅ Бот запущен.")
-            self.logger.info("Бот запущен.")
-        else:
-            await update.message.reply_text("⚠️ Бот уже запущен.")
-
-    async def stop_bot(self, update, context):
-        """
-        Команда для остановки бота.
-        """
-        if self.is_running:
-            self.is_running = False
-            await update.message.reply_text("⏹️ Бот остановлен.")
-            self.logger.info("Бот остановлен.")
-        else:
-            await update.message.reply_text("⚠️ Бот уже остановлен.")
-
-    async def run(self):
-        """
-        Запуск Telegram-бота.
-        """
-        await self.application.initialize()
-        await self.application.start()
-        await self.application.updater.start_polling()
-        self.logger.info("Telegram-бот запущен.")

@@ -1,20 +1,17 @@
 # Получение рыночных данных
 
-from tinkoff.invest import Client, CandleInterval
+from tinkoff.invest import AsyncClient, CandleInterval
 import pandas as pd
 from datetime import datetime, timedelta
 from config import API_TOKEN, FIGI_TO_TICKER, TIMEFRAME, LIMIT
+import logging
 
-# Определение длительности интервалов в минутах
+logger = logging.getLogger(__name__)
+
 INTERVAL_DURATION = {
-    "1m": 1,
-    "5m": 5,
-    "15m": 15,
-    "1h": 60,
-    "1d": 1440,
+    "1m": 1, "5m": 5, "15m": 15, "1h": 60, "1d": 1440,
 }
 
-# Маппинг интервалов свечей
 INTERVAL_MAPPING = {
     "1m": CandleInterval.CANDLE_INTERVAL_1_MIN,
     "5m": CandleInterval.CANDLE_INTERVAL_5_MIN,
@@ -23,28 +20,23 @@ INTERVAL_MAPPING = {
     "1d": CandleInterval.CANDLE_INTERVAL_DAY,
 }
 
-# Получаем прототип интервала и его длительность
 CANDLE_INTERVAL = INTERVAL_MAPPING.get(TIMEFRAME, CandleInterval.CANDLE_INTERVAL_15_MIN)
 INTERVAL_MINUTES = INTERVAL_DURATION.get(TIMEFRAME, 15)
 
-def fetch_market_data(figi, interval=CANDLE_INTERVAL, limit=LIMIT):
-    """Получение рыночных данных с выводом в терминал."""
+async def fetch_market_data(figi, interval=CANDLE_INTERVAL, limit=LIMIT):
     try:
-        with Client(API_TOKEN) as client:
+        async with AsyncClient(API_TOKEN) as client:
             end_time = datetime.utcnow()
             start_time = end_time - timedelta(minutes=limit * INTERVAL_MINUTES)
             ticker = FIGI_TO_TICKER.get(figi, "Unknown Ticker")
-            print(f"Запрос данных для {ticker} ({figi}):")
-            print(f"Период: {start_time.strftime('%Y-%m-%d %H:%M')} - {end_time.strftime('%Y-%m-%d %H:%M')}")
-            print(f"Интервал: {TIMEFRAME}, Количество свечей: {limit}")
-            candles = client.market_data.get_candles(
+            logger.info(f"Запрос данных для {ticker} ({figi}): {start_time} - {end_time}")
+            candles = (await client.market_data.get_candles(
                 figi=figi,
                 from_=start_time,
                 to=end_time,
                 interval=interval
-            ).candles
+            )).candles
 
-            # Преобразование данных в DataFrame
             df = pd.DataFrame([{
                 "timestamp": candle.time,
                 "open": candle.open.units + candle.open.nano / 1e9,
@@ -54,26 +46,21 @@ def fetch_market_data(figi, interval=CANDLE_INTERVAL, limit=LIMIT):
                 "volume": candle.volume
             } for candle in candles])
             df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-            # Вывод первых 5 строк в терминал
-            print("Полученные данные:")
-            print(df.head().to_string(index=False))
-            print("-" * 50)
+            logger.info(f"Получено {len(df)} свечей для {ticker}")
+            print(f"Получено {len(df)} свечей для {ticker} ({figi})")  # Для отладки в терминале
             return df
     except Exception as e:
-        print(f"Ошибка для FIGI {figi}: {str(e)}")
+        logger.error(f"Ошибка для FIGI {figi}: {str(e)}")
+        print(f"Ошибка для FIGI {figi}: {str(e)}")  # Для отладки в терминале
         return None
 
-def fetch_all_market_data():
-    """Получение данных для всех инструментов с выводом статуса."""
+async def fetch_all_market_data():
     market_data = {}
     for figi, ticker in FIGI_TO_TICKER.items():
-        print(f"\n{'=' * 30}")
-        print(f"Обработка инструмента: {ticker} ({figi})")
-        data = fetch_market_data(figi)
+        logger.info(f"Обработка инструмента: {ticker} ({figi})")
+        data = await fetch_market_data(figi)
         if data is not None and not data.empty:
             market_data[figi] = data
-            print(f"Успешно получено {len(data)} свечей")
         else:
-            print(f"Не удалось получить данные для {ticker}")
+            logger.warning(f"Не удалось получить данные для {ticker}")
     return market_data
