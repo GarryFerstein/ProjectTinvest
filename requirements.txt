@@ -1,9 +1,18 @@
-tinkoff-investments
-load_dotenv
-matplotlib
-pandas
-numpy
-ta
-asyncio
-logging
-telegram
+# Стандартная библиотека Python (не требует установки)
+asyncio  # Модуль для асинхронного программирования
+logging  # Модуль для настройки логирования
+
+# Сторонние библиотеки (требуется установка через pip)
+tinkoff-investments  # Библиотека для работы с API Тинькофф Инвестиций
+load_dotenv  # Библиотека для загрузки переменных окружения из файла .env
+matplotlib  # Библиотека для построения графиков
+pandas  # Библиотека для работы с табличными данными
+numpy  # Библиотека для численных вычислений
+ta  # Библиотека для технического анализа финансовых данных
+telegram  # Библиотека для работы с Telegram Bot API
+aiohttp   # Асинхронная библиотека для HTTP-запросов
+textblob  # Библиотека для обработки естественного языка
+
+
+# Если будут проблемы с установкой модулей, то можно установить с указанием полного пути: 
+# /Users/garriferstejn/ProjectTinvest/bin/pip install aiohttp beautifulsoup4 textblob

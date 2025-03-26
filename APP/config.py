@@ -10,6 +10,9 @@ load_dotenv()
 API_TOKEN = os.getenv("TINKOFF_TOKEN")
 ACCOUNT_ID = os.getenv("ACCOUNT_ID")  # ID брокерского счета
 
+# Токен API новостного агрегатора NewsAPI
+NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
+
 # Основная информация
 NAME = os.getenv("NAME", "Торговый бот для Тинькофф Инвестиций")
 
