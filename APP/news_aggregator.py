@@ -1,4 +1,4 @@
-# Новостной агрегатор: NewsAPI
+# Новостн агрегатор: NewsAPI
 
 import aiohttp
 import asyncio
