@@ -10,5 +10,9 @@ COPY . /app
 # Устанавливаем зависимости из requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Добавляем порт 
+EXPOSE 8000  
+
 # Команда для запуска бота
-CMD ["python", "main.py"]
+ENTRYPOINT ["python"]
+CMD ["app.py"]
