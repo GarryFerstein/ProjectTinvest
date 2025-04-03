@@ -1,17 +1,20 @@
-# Новостн агрегатор: NewsAPI
+# Новостной агрегатор NewsAPI без анализа тональности
 
 import aiohttp
 import asyncio
-from textblob import TextBlob
 import logging
+import certifi
+import ssl
 from datetime import datetime, timedelta
 from config import FIGI_TO_TICKER, NEWSAPI_KEY
 
+# Настройка логирования
 logger = logging.getLogger(__name__)
 
+# Хранилище новостей с таймстампами
 news_cache = {
-    "general": {"sentiment": 0.0, "text": "Новости не найдены", "last_updated": None},
-    "tickers": {figi: {"sentiment": 0.0, "text": "Новости не найдены", "last_updated": None} for figi in FIGI_TO_TICKER.keys()}
+    "general": {"text": "Новости не найдены", "last_updated": None},
+    "tickers": {figi: {"text": "Новости не найдены", "last_updated": None} for figi in FIGI_TO_TICKER.keys()}
 }
 
 NEWSAPI_DAILY_LIMIT = 100
@@ -41,10 +44,13 @@ async def fetch_newsapi_general_news():
     query = "российский фондовый рынок"
     url = f"https://newsapi.org/v2/everything?q={query}&language=ru&sortBy=publishedAt&apiKey={NEWSAPI_KEY}"
     
+    # Создаем SSL-контекст с сертификатами из certifi
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    
     try:
         await asyncio.sleep(1)
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=False) as response:  # Отключение проверки SSL
+            async with session.get(url, ssl=ssl_context) as response:
                 if response.status == 200:
                     newsapi_request_count += 1
                     data = await response.json()
@@ -52,26 +58,23 @@ async def fetch_newsapi_general_news():
                     if articles:
                         latest_article = articles[0]
                         title = latest_article["title"]
-                        description = latest_article["description"] or ""
-                        full_text = f"{title} {description}"
-                        sentiment = TextBlob(full_text).sentiment.polarity
-                        result = {"sentiment": sentiment, "text": title, "last_updated": current_time}
+                        result = {"text": title, "last_updated": current_time}
                         news_cache["general"] = result
-                        logger.info(f"NewsAPI общая новость: {title} (тональность: {sentiment})")
+                        logger.info(f"NewsAPI общая новость: {title}")
                         return result
-                    result = {"sentiment": 0.0, "text": "Новости не найдены", "last_updated": current_time}
+                    result = {"text": "Новости не найдены", "last_updated": current_time}
                     news_cache["general"] = result
                     logger.debug("NewsAPI: общие новости не найдены")
                     return result
                 elif response.status == 429:
-                    logger.error("NewsAPI: ошибка HTTP 429 для общих новостей - слишком много запросов")
-                    return {"sentiment": 0.0, "text": "Ошибка HTTP 429 - слишком много запросов", "last_updated": current_time}
+                    logger.error("NewsAPI: ошибка HTTP 429 для общих новостей")
+                    return {"text": "Ошибка HTTP 429 - слишком много запросов", "last_updated": current_time}
                 else:
                     logger.error(f"NewsAPI: ошибка HTTP {response.status} для общих новостей")
-                    return {"sentiment": 0.0, "text": f"Ошибка HTTP {response.status}", "last_updated": current_time}
+                    return {"text": f"Ошибка HTTP {response.status}", "last_updated": current_time}
     except Exception as e:
         logger.error(f"NewsAPI: ошибка для общих новостей: {str(e)}")
-        return {"sentiment": 0.0, "text": "Ошибка получения новостей", "last_updated": current_time}
+        return {"text": "Ошибка получения новостей", "last_updated": current_time}
 
 async def fetch_newsapi_ticker_news(figi, ticker):
     """Получение новостей для конкретного тикера через NewsAPI на русском языке."""
@@ -93,10 +96,14 @@ async def fetch_newsapi_ticker_news(figi, ticker):
         return news_cache["tickers"][figi]
     
     url = f"https://newsapi.org/v2/everything?q={ticker}&language=ru&sortBy=publishedAt&apiKey={NEWSAPI_KEY}"
+    
+    # Создаем SSL-контекст с сертификатами из certifi
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    
     try:
         await asyncio.sleep(1)
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=False) as response:  # Отключение проверки SSL
+            async with session.get(url, ssl=ssl_context) as response:
                 if response.status == 200:
                     newsapi_request_count += 1
                     data = await response.json()
@@ -104,26 +111,23 @@ async def fetch_newsapi_ticker_news(figi, ticker):
                     if articles:
                         latest_article = articles[0]
                         title = latest_article["title"]
-                        description = latest_article["description"] or ""
-                        full_text = f"{title} {description}"
-                        sentiment = TextBlob(full_text).sentiment.polarity
-                        result = {"sentiment": sentiment, "text": title, "last_updated": current_time}
+                        result = {"text": title, "last_updated": current_time}
                         news_cache["tickers"][figi] = result
-                        logger.info(f"NewsAPI новость для {ticker} ({figi}): {title} (тональность: {sentiment})")
+                        logger.info(f"NewsAPI новость для {ticker} ({figi}): {title}")
                         return result
-                    result = {"sentiment": 0.0, "text": "Новости не найдены", "last_updated": current_time}
+                    result = {"text": "Новости не найдены", "last_updated": current_time}
                     news_cache["tickers"][figi] = result
                     logger.debug(f"NewsAPI: новости для {ticker} ({figi}) не найдены")
                     return result
                 elif response.status == 429:
-                    logger.error(f"NewsAPI: ошибка HTTP 429 для {ticker} ({figi}) - слишком много запросов")
-                    return {"sentiment": 0.0, "text": "Ошибка HTTP 429 - слишком много запросов", "last_updated": current_time}
+                    logger.error(f"NewsAPI: ошибка HTTP 429 для {ticker} ({figi})")
+                    return {"text": "Ошибка HTTP 429 - слишком много запросов", "last_updated": current_time}
                 else:
                     logger.error(f"NewsAPI: ошибка HTTP {response.status} для {ticker} ({figi})")
-                    return {"sentiment": 0.0, "text": f"Ошибка HTTP {response.status}", "last_updated": current_time}
+                    return {"text": f"Ошибка HTTP {response.status}", "last_updated": current_time}
     except Exception as e:
         logger.error(f"NewsAPI: ошибка для {ticker} ({figi}): {str(e)}")
-        return {"sentiment": 0.0, "text": "Ошибка получения новостей", "last_updated": current_time}
+        return {"text": "Ошибка получения новостей", "last_updated": current_time}
 
 async def analyze_news(figi, ticker):
     """Анализ новостей с NewsAPI для общего рынка и конкретного тикера."""
@@ -131,14 +135,10 @@ async def analyze_news(figi, ticker):
     ticker_task = fetch_newsapi_ticker_news(figi, ticker)
     general_result, ticker_result = await asyncio.gather(general_task, ticker_task)
     
-    general_sentiment = general_result["sentiment"]
-    ticker_sentiment = ticker_result["sentiment"]
-    avg_sentiment = (general_sentiment + ticker_sentiment) / 2
-    
     news_summary = (
-        f"Общий рынок: {general_result['text']} (тональность: {general_sentiment:.2f}), "
-        f"{ticker}: {ticker_result['text']} (тональность: {ticker_sentiment:.2f})"
+        f"Общий рынок: {general_result['text']}, "
+        f"{ticker}: {ticker_result['text']}"
     )
     
     logger.info(f"Новости для {ticker} ({figi}): {news_summary}")
-    return {"avg_sentiment": avg_sentiment, "summary": news_summary}
+    return {"avg_sentiment": 0.0, "summary": news_summary}  

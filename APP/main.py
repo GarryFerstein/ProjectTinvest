@@ -11,7 +11,6 @@ from indicators import calculate_indicators
 from signals import generate_signals
 from news_aggregator import analyze_news  
 from config import API_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, FIGI_TO_TICKER, TIMEOUT
-import os
 
 # Настройка логирования
 logging.basicConfig(
@@ -19,13 +18,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-# Получаем переменные окружения
-api_token = os.getenv("TINKOFF_API_KEY", API_TOKEN)
-telegram_token = os.getenv("TELEGRAM_TOKEN", TELEGRAM_TOKEN)
-telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID)
-
-# Инициализация Telegram-уведомлений
-telegram_notifier = TelegramNotifier(telegram_token, telegram_chat_id)
+telegram_notifier = TelegramNotifier(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
 sent_signals = set()
 market_status_history = {figi: None for figi in FIGI_TO_TICKER.keys()}
 
@@ -56,7 +49,7 @@ async def check_market_status(figi, market_data_service):
         return False
     except Exception as e:
         ticker = FIGI_TO_TICKER.get(figi, "Unknown Ticker")
-        await telegram_notifier.send_message(f"❌ Ошибка статуса для {ticker} ({figi}): {e}")
+        await telegram_notifier.send_message(f"❌ Ошибка статуса для {ticker} ({figi}): {str(e)}")
         return False
 
 async def process_instrument(figi, ticker, market_data_service):
@@ -65,7 +58,7 @@ async def process_instrument(figi, ticker, market_data_service):
     if not is_market_open:
         return
 
-    # Анализ новостей (без фильтрации сигналов)
+    # Анализ новостей
     news_data = await analyze_news(figi, ticker)
 
     df = await fetch_market_data(figi)
@@ -76,7 +69,7 @@ async def process_instrument(figi, ticker, market_data_service):
     try:
         df = calculate_indicators(df)
     except ValueError as e:
-        await telegram_notifier.send_message(f"❌ Ошибка индикаторов для {ticker} ({figi}): {e}")
+        await telegram_notifier.send_message(f"❌ Ошибка индикаторов для {ticker} ({figi}): {str(e)}")
         return
 
     signals_df = generate_signals(df)
@@ -86,9 +79,14 @@ async def process_instrument(figi, ticker, market_data_service):
             signal_key = (figi, timestamp.isoformat(), "buy")
             if signal_key not in sent_signals:
                 signal_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                general_news, ticker_news = news_data['summary'].split(", ", 1)
+                general_news = general_news.replace("Общий рынок: ", "")
+                ticker_news = ticker_news.replace(f"{ticker}: ", "")
                 message = (
                     f"🟢 Сигнал на покупку: {ticker} ({figi}) по цене {row['close']:.2f} RUB в {signal_time}\n"
-                    f"Новости: {news_data['summary']}"
+                    f"Новости:\n"
+                    f"Общий рынок: {general_news}\n"
+                    f"{ticker}: {ticker_news}"
                 )
                 await telegram_notifier.send_message(message)
                 print(message)
@@ -100,20 +98,25 @@ async def process_instrument(figi, ticker, market_data_service):
             signal_key = (figi, timestamp.isoformat(), "sell")
             if signal_key not in sent_signals:
                 signal_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                general_news, ticker_news = news_data['summary'].split(", ", 1)
+                general_news = general_news.replace("Общий рынок: ", "")
+                ticker_news = ticker_news.replace(f"{ticker}: ", "")
                 message = (
                     f"🔴 Сигнал на продажу: {ticker} ({figi}) по цене {row['close']:.2f} RUB в {signal_time}\n"
-                    f"Новости: {news_data['summary']}"
+                    f"Новости:\n"
+                    f"Общий рынок: {general_news}\n"
+                    f"{ticker}: {ticker_news}"
                 )
                 await telegram_notifier.send_message(message)
                 print(message)
                 sent_signals.add(signal_key)
 
-async def run_bot():
+async def main():
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     await telegram_notifier.send_message(f"🚀 Бот запущен в {start_time}")
     print(f"Бот запущен в {start_time}")
 
-    async with AsyncClient(api_token) as client:
+    async with AsyncClient(API_TOKEN) as client:
         market_data_service = client.market_data
         try:
             while True:
@@ -137,7 +140,7 @@ async def run_bot():
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     try:
-        loop.run_until_complete(run_bot())
+        loop.run_until_complete(main())
     except KeyboardInterrupt:
         stop_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         loop.run_until_complete(telegram_notifier.send_message(f"🛑 Бот остановлен в {stop_time}"))
