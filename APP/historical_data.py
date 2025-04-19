@@ -5,18 +5,17 @@ import time
 import csv
 from datetime import datetime, timedelta, timezone
 from tinkoff.invest import Client, CandleInterval, RequestError
-import os
+from config import API_TOKEN
 
 # === Конфигурация ===
-API_TOKEN = os.getenv("TINKOFF_TOKEN")
-FIGI = "BBG004730N88" # На примере Сбербанка
-INTERVAL = CandleInterval.CANDLE_INTERVAL_15_MIN
-START_DATE = "2025-01-01 00:00:00"
-END_DATE = "2025-01-30 23:59:59"
-LIMIT = 1000
+FIGI = "BBG004S68507"  # Идентификатор инструмента
+CANDLE_INTERVAL = CandleInterval.CANDLE_INTERVAL_15_MIN
+END_DATE = datetime.utcnow().replace(tzinfo=timezone.utc)  # Текущая дата в UTC
+START_DATE = END_DATE - timedelta(days=10)  # 10 дней назад
 CSV_FILENAME = "historical_data.csv"
-SLEEP_TIME = 2  # Увеличенная задержка в секундах
+SLEEP_TIME = 2  # Задержка между запросами (сек)
 MAX_RETRIES = 3  # Максимальное количество повторных попыток
+LIMIT = 200  # Лимит свечей за один запрос (из config.py)
 
 # Словарь для преобразования интервала в timedelta
 INTERVAL_TO_DELTA = {
@@ -29,15 +28,24 @@ INTERVAL_TO_DELTA = {
     CandleInterval.CANDLE_INTERVAL_MONTH: timedelta(days=30)
 }
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 def save_to_csv(data, filename):
     """Сохранение данных в CSV с сортировкой по времени."""
+    if not data:
+        logger.warning(f"Нет данных для сохранения в {filename}")
+        return
+
     data.sort(key=lambda x: x.time)
 
     with open(filename, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["datetime", "open", "high", "low", "close", "volume"])
+        writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
 
         for candle in data:
             writer.writerow([
@@ -49,22 +57,21 @@ def save_to_csv(data, filename):
                 candle.volume
             ])
 
-    logging.info(f"✅ Данные сохранены в {filename}")
+    logger.info(f"✅ Данные сохранены в {filename}, записано {len(data)} свечей")
 
-def fetch_candles(figi, start_date, end_date, interval):
+def fetch_candles(figi, start_date, end_date, interval, limit=LIMIT):
     """
-    Получение исторических свечей с обработкой зависания.
+    Получение исторических свечей с обработкой ошибок.
     """
     with Client(API_TOKEN) as client:
         candles = []
-        current_start = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-        end_date = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-        retries = 0
+        current_start = start_date
+        delta = INTERVAL_TO_DELTA[interval]
 
         while current_start < end_date:
             try:
-                current_end = min(current_start + timedelta(minutes=LIMIT * 15), end_date)
-                logging.info(f"🔄 Запрос данных для {figi} с {current_start} до {current_end}")
+                current_end = min(current_start + delta * limit, end_date)
+                logger.info(f"🔄 Запрос данных ({figi}) с {current_start} до {current_end}")
 
                 response = client.market_data.get_candles(
                     figi=figi,
@@ -75,43 +82,34 @@ def fetch_candles(figi, start_date, end_date, interval):
                 batch = response.candles
 
                 if not batch:
-                    retries += 1
-                    logging.warning(f"⚠️ Нет данных за {current_start} — {current_end}. Попытка {retries}/{MAX_RETRIES}")
+                    logger.warning(f"⚠️ Нет данных за {current_start} — {current_end}")
+                    current_start = current_end  # Сдвигаем на конец окна
+                else:
+                    candles.extend(batch)
+                    current_start = batch[-1].time.replace(tzinfo=timezone.utc) + delta
+                    logger.info(f"✅ Получено {len(batch)} свечей")
 
-                    if retries >= MAX_RETRIES:
-                        logging.error(f"🚫 Пропускаем интервал {current_start} — {current_end} после {MAX_RETRIES} неудачных попыток.")
-                        current_start = current_end
-                        retries = 0
-                    else:
-                        logging.info(f"⏳ Ожидание {SLEEP_TIME} сек перед повторной попыткой...")
-                        time.sleep(SLEEP_TIME)
-                    continue
-
-                candles.extend(batch)
-                # Обновляем current_start на время последней свечи + интервал
-                current_start = batch[-1].time.replace(tzinfo=timezone.utc) + INTERVAL_TO_DELTA[interval]
-                retries = 0
-
-                logging.info(f"⏳ Ожидание {SLEEP_TIME} сек перед следующим запросом...")
-                time.sleep(SLEEP_TIME)
+                time.sleep(SLEEP_TIME)  # Задержка для соблюдения лимитов API
 
             except RequestError as e:
-                logging.error(f"❌ Ошибка API: {e}")
-
+                logger.error(f"❌ Ошибка API: {e}")
                 if "50002" in str(e):
-                    logging.error(f"🚫 FIGI {figi} не найден! Завершаем работу.")
-                    break
-
-                logging.info(f"🔄 Повторный запрос через {SLEEP_TIME} секунд...")
+                    logger.error(f"🚫 FIGI {figi} не найден!")
+                    return candles
                 time.sleep(SLEEP_TIME)
+                current_start = current_end  # Пропускаем интервал при ошибке
+            except Exception as e:
+                logger.error(f"❌ Неизвестная ошибка: {str(e)}")
+                time.sleep(SLEEP_TIME)
+                current_start = current_end
 
         return candles
 
 if __name__ == "__main__":
-    candles_data = fetch_candles(FIGI, START_DATE, END_DATE, INTERVAL)
-
+    logger.info(f"🚀 Начало выгрузки данных ({FIGI})")
+    candles_data = fetch_candles(FIGI, START_DATE, END_DATE, CANDLE_INTERVAL)
     if candles_data:
         save_to_csv(candles_data, CSV_FILENAME)
-        logging.info(f"✅ Загружено {len(candles_data)} свечей для FIGI: {FIGI}.")
+        logger.info(f"✅ Завершена выгрузка ({FIGI})")
     else:
-        logging.warning(f"⚠️ Данных для FIGI {FIGI} нет.")
+        logger.warning(f"⚠️ Данные ({FIGI}) нет.")

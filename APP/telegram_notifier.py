@@ -24,3 +24,4 @@ class TelegramNotifier:
             self.logger.info(f"Message sent: {message}")
         except Exception as e:
             self.logger.error(f"Failed to send message: {e}")
+            
