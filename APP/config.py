@@ -22,8 +22,8 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 # Список FIGI и их тикеры
 FIGI_TO_TICKER = {
-    "BBG004S681B4": "NLMK",   # НЛМК
-    "BBG004731489": "GMKN",   # ГМК Норникель
+    "BBG004S68614": "AFKS",   # АФК Система
+    "BBG004S68B31": "ALRS",   # Европлан
     "BBG004S68507": "MAGN",   # Магнитогорский металлургический комбинат
     "BBG004S68598": "MTLR",   # Мечел
     "BBG004S682Z6": "RTKM",   # Ростелеком

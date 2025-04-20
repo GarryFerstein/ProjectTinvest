@@ -22,7 +22,7 @@ from tinkoff.invest import Client
 import os
 
 API_TOKEN = os.getenv("TINKOFF_TOKEN")
-ticker = 'OZPH'  # Replace with the desired ticker
+ticker = 'ALRS'  # Replace with the desired ticker
 
 with Client(API_TOKEN) as client:
     # Get instrument details by ticker
