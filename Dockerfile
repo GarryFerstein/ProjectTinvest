@@ -8,7 +8,7 @@ RUN apt-get update && apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/*
 
 # Устанавливаем рабочую директорию
-WORKDIR /app
+WORKDIR /APP
 
 # Копируем requirements.txt и устанавливаем зависимости
 COPY requirements.txt .
